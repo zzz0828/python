@@ -1,0 +1,33 @@
+import requests
+from lxml import etree
+import time
+
+
+IP_Data = []
+class Ip(object):
+    def Url_Ip(self):
+        for i in range(1, 21):
+            url = 'http://www.xicidaili.com/wn/{}'.format(str(i))
+            # try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.146 Safari/537.36',}
+            r = requests.Session().get(url, headers=headers)
+            headers['If-None-Match'] = r.headers['ETag']
+            print(r.status_code)
+            r.encoding = r.apparent_encoding
+            select = etree.HTML(r.text)
+
+            Ip_list = select.xpath('//tr[@class]/td[2]/text()')
+            for Ip in Ip_list:
+                Ip = 'https://' + Ip
+                try:
+                    r = requests.Session().get('http://www.baidu.com', proxies={'https': Ip})
+                    r.encoding = r.apparent_encoding
+                    print(r.status_code)
+                    with open("ip.txt", "w") as f:
+                        f.write(Ip)
+                except Exception:
+                    continue
+        time.sleep(1)
+
+i = Ip()
+i.Url_Ip()
