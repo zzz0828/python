@@ -1,0 +1,72 @@
+# python
+import requests
+from lxml import etree
+import json
+import re
+import MySQLdb
+import MySQLdb.cursors
+
+
+class DouBan(object):
+    def __init__(self):
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.146 Safari/537.36',
+            'Host': 'movie.douban.com',
+            'Referer': 'https: // movie.douban.com / explore',
+            'Accept - Encoding': 'gzip, deflate, br',
+            'Accept - Language': 'zh - CN, zh;q = 0.9',
+            'Connection': 'keep - alive'
+        }
+        #获取登录页面的html，主要是为了取得验证码地址和captchaId
+        r = requests.get('https://accounts.douban.com/login', headers=self.headers)
+        #查看连接状态码，看是否成功获取页面
+        print(r.status_code)
+        #获取登页表单提交的变量captchaId
+        captchaId = re.findall(r'<input type="hidden" name="captcha-id" value="(.*)"/>', r.text)
+        #获取验证码的地址
+        imgUrl = re.findall(r'<img id="captcha_image" src="(.*)" alt', r.text)
+        #下载验证码并保存到douban.jpg文件中
+        imgGet = requests.get(imgUrl[0], headers=self.headers, proxies=proxies)
+        with open('douban.jpg', 'wb') as f:
+            f.write(imgGet.content)
+            f.close()
+        #连接数据库
+        db = MySQLdb.connect(host='localhost', user='root', passwd='root', db='douban', port=3306,
+                             charset='utf8', cursorclass=MySQLdb.cursors.DictCursor)
+        db.autocommit(True)
+        self.cursor = db.cursor()
+        #获取数据库里面存的豆瓣登录账号和密码
+        self.cursor.execute('select username,password from douban_data ')
+        result = self.cursor.fetchone()
+        #将要提交的数据保存到data里面
+        self.data = {
+            "source": "movie",
+            "redir": "https://movie.douban.com/",
+            "form_email": result['username'],
+            "form_password": result['password'],
+            "captcha-solution": input("请输入验证码："),
+            "captcha-id": captchaId[0],
+            "login": "登录"
+        }
+
+    def DouBan_Data(self):
+        #登录
+        r = requests.post('https://accounts.douban.com/login', headers=self.headers, data=self.data)
+        r = etree.HTML(r.text)
+        #获取首页的正在热映的电影名，评分和演员，并保存到数据库里面
+        movie_title = r.xpath("//li/@data-title")
+        movie_code = r.xpath("//li/@data-rate")
+        movie_actor = r.xpath("//li/@data-actors")
+
+        for i in range(len(movie_title)):
+            if movie_code[i] == "":
+                movie_code[i] = "暂无评分"
+            self.cursor.execute("insert into movie(title, code, actor) value(%s, %s, %s) ",
+                                (movie_title[i], movie_code[i], movie_actor[i]))
+            print(movie_title[i], movie_code[i], movie_actor[i])
+
+
+
+
+d = DouBan()
+d.DouBan_Data()
